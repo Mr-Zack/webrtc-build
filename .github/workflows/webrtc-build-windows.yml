@@ -6,17 +6,23 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+
+    # 🔴 关键：使用 GitHub Runner 自带 VS2022，不用 Google 的 toolchain
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
 
     steps:
-    - uses: actions/checkout@v4
+    # 1️⃣ Checkout（只是为了放 workflow，本身不参与编译）
+    - name: Checkout repo
+      uses: actions/checkout@v4
 
+    # 2️⃣ 拉 depot_tools
     - name: Clone depot_tools
       run: |
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
         echo "$PWD\depot_tools" >> $env:GITHUB_PATH
 
+    # 3️⃣ 拉 WebRTC 源码 + 同步依赖
     - name: Fetch WebRTC
       shell: cmd
       run: |
@@ -27,16 +33,37 @@ jobs:
         gclient sync
         gclient runhooks
 
-    - name: Generate LASTCHANGE (fix CI issue)
+    # 4️⃣ 生成 LASTCHANGE / LASTCHANGE.committime（官方正确方式）
+    - name: Generate LASTCHANGE
       shell: cmd
       run: |
         cd webrtc\src
-        python build\util\lastchange.py -o build\util\LASTCHANGE
-        python build\util\lastchange.py -o build\util\LASTCHANGE.committime --committime
+        python build\util\write_lastchange.py
 
+    # 5️⃣ GN 配置（静态库，适合 MixedReality.WebRTC）
+    - name: Configure GN
+      shell: cmd
+      run: |
+        cd webrtc\src
+        gn gen out\Release --args="^
+          is_debug=false ^
+          rtc_include_tests=false ^
+          rtc_build_examples=false ^
+          is_component_build=false ^
+          use_rtti=true ^
+          treat_warnings_as_errors=false
+        "
+
+    # 6️⃣ 编译（限制并行，防止 Windows Runner 内存炸）
     - name: Build WebRTC
       shell: cmd
       run: |
         cd webrtc\src
-        gn gen out\Release --args="is_debug=false rtc_include_tests=false is_component_build=false"
         ninja -C out\Release -j2
+
+    # 7️⃣ 上传编译产物
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: webrtc-windows-release
+        path: webrtc/src/out/Release
