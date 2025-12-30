@@ -19,6 +19,10 @@ jobs:
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
         echo "$PWD\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+    - name: Install VS Build Tools
+      run: |
+        choco install visualstudio2022buildtools -y --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --norestart"
+
     # 3️⃣ 拉取 WebRTC 源码
     - name: Fetch WebRTC
       shell: cmd
