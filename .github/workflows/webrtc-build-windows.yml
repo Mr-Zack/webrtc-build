@@ -1,53 +1,47 @@
-name: Build WebRTC on Windows
+name: Build WebRTC (Windows)
 
-# 手动触发
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 180
 
     steps:
-    # 1. 检出仓库（如果你需要用自己的 repo 的脚本）
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    - name: Checkout repo
+      uses: actions/checkout@v4
 
-    # 2. 安装依赖（Python + Git + Visual Studio Build Tools）
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies
+    - name: Clone depot_tools
       run: |
-        choco install git -y
-        choco install visualstudio2022buildtools -y
-        choco install cmake -y
-        choco install ninja -y
-        choco install depot_tools -y
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        echo "$PWD\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-    # 3. 拉取 WebRTC 源码
     - name: Fetch WebRTC
-      shell: powershell
+      shell: cmd
       run: |
-        $env:PATH += ";C:\tools\depot_tools"
         mkdir webrtc
         cd webrtc
         fetch --nohooks webrtc
         cd src
-        gclient sync
+        gclient sync --jobs 4
 
-    # 4. 生成 Visual Studio 项目
-    - name: Generate build files
-      shell: powershell
+    - name: Configure GN
+      shell: cmd
       run: |
         cd webrtc\src
-        gn gen out\Debug --ide=vs2022 --args="is_debug=true target_os=\"win\""
+        set DEPOT_TOOLS_WIN_TOOLCHAIN=0
+        gn gen out\Release --args="is_debug=false rtc_include_tests=false is_component_build=false target_cpu='x64'"
 
-    # 5. 编译
     - name: Build WebRTC
-      shell: powershell
+      shell: cmd
       run: |
         cd webrtc\src
-        ninja -C out\Debug
+        set DEPOT_TOOLS_WIN_TOOLCHAIN=0
+        ninja -C out\Release -j 4
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: webrtc-windows
+        path: webrtc/src/out/Release
