@@ -1,0 +1,44 @@
+name: Build WebRTC (Windows)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Clone depot_tools
+      run: |
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        echo "$PWD\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Fetch WebRTC
+      shell: cmd
+      run: |
+        mkdir webrtc
+        cd webrtc
+        fetch --nohooks webrtc
+        cd src
+        gclient sync
+
+    - name: Configure GN
+      shell: cmd
+      run: |
+        cd webrtc\src
+        gn gen out\Release --args="is_debug=false rtc_include_tests=false is_component_build=false"
+
+    - name: Build WebRTC
+      shell: cmd
+      run: |
+        cd webrtc\src
+        ninja -C out\Release
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: webrtc-windows
+        path: webrtc/src/out/Release
