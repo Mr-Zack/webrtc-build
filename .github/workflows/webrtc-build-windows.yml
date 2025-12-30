@@ -1,6 +1,6 @@
 name: Build WebRTC on Windows
 
-# 只允许手动触发
+# 手动触发
 on:
   workflow_dispatch:
 
@@ -8,34 +8,46 @@ jobs:
   build:
     runs-on: windows-latest
 
-    env:
-      DEPOT_TOOLS_PATH: ${{ github.workspace }}\depot_tools
-      DEPOT_TOOLS_WIN_TOOLCHAIN: 0  # 使用系统 MSVC 工具链
-
     steps:
-      # 1. 检出仓库
-      - name: Checkout
-        uses: actions/checkout@v3
+    # 1. 检出仓库（如果你需要用自己的 repo 的脚本）
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      # 2. 安装依赖（Python, Git, 7zip）
-      - name: Install dependencies
-        run: |
-          choco install -y python3 git 7zip
-          python --version
-          git --version
+    # 2. 安装依赖（Python + Git + Visual Studio Build Tools）
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
 
-      # 3. 克隆 depot_tools（缓存）
-      - name: Cache depot_tools
-        uses: actions/cache@v3
-        with:
-          path: depot_tools
-          key: depot_tools-v1
+    - name: Install dependencies
+      run: |
+        choco install git -y
+        choco install visualstudio2022buildtools -y
+        choco install cmake -y
+        choco install ninja -y
+        choco install depot_tools -y
 
-      - name: Clone depot_tools
-        if: steps.cache-depot-tools.outputs.cache-hit != 'true'
-        run: |
-          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "%DEPOT_TOOLS_PATH%"
+    # 3. 拉取 WebRTC 源码
+    - name: Fetch WebRTC
+      shell: powershell
+      run: |
+        $env:PATH += ";C:\tools\depot_tools"
+        mkdir webrtc
+        cd webrtc
+        fetch --nohooks webrtc
+        cd src
+        gclient sync
 
-      # 4. 设置 depot_tools 到 PATH
-      - name: Add depot_tools to PATH
-        run: echo "%DEPOT_TOOLS_PATH%" >>
+    # 4. 生成 Visual Studio 项目
+    - name: Generate build files
+      shell: powershell
+      run: |
+        cd webrtc\src
+        gn gen out\Debug --ide=vs2022 --args="is_debug=true target_os=\"win\""
+
+    # 5. 编译
+    - name: Build WebRTC
+      shell: powershell
+      run: |
+        cd webrtc\src
+        ninja -C out\Debug
