@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
 
     steps:
     - name: Checkout repo
