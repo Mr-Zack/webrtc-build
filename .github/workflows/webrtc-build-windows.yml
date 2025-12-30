@@ -1,69 +1,82 @@
-name: Build WebRTC (Windows)
+name: Build WebRTC on Windows
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: windows-latest
 
-    # 🔴 关键：使用 GitHub Runner 自带 VS2022，不用 Google 的 toolchain
     env:
-      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+      DEPOT_TOOLS_PATH: ${{ github.workspace }}\depot_tools
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0  # 使用系统 MSVC 工具链
 
     steps:
-    # 1️⃣ Checkout（只是为了放 workflow，本身不参与编译）
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      # 1. 检出仓库
+      - name: Checkout
+        uses: actions/checkout@v3
 
-    # 2️⃣ 拉 depot_tools
-    - name: Clone depot_tools
-      run: |
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-        echo "$PWD\depot_tools" >> $env:GITHUB_PATH
+      # 2. 安装依赖（Python, Git, 7zip）
+      - name: Install dependencies
+        run: |
+          choco install -y python3 git 7zip
+          python --version
+          git --version
 
-    # 3️⃣ 拉 WebRTC 源码 + 同步依赖
-    - name: Fetch WebRTC
-      shell: cmd
-      run: |
-        mkdir webrtc
-        cd webrtc
-        fetch webrtc
-        cd src
-        gclient sync
-        gclient runhooks
+      # 3. 克隆 depot_tools（缓存）
+      - name: Cache depot_tools
+        uses: actions/cache@v3
+        with:
+          path: depot_tools
+          key: depot_tools-v1
 
-    # 4️⃣ 生成 LASTCHANGE / LASTCHANGE.committime（官方正确方式）
-    - name: Generate LASTCHANGE
-      shell: cmd
-      run: |
-        cd webrtc\src
-        python build\util\write_lastchange.py
+      - name: Clone depot_tools
+        if: steps.cache-depot-tools.outputs.cache-hit != 'true'
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "%DEPOT_TOOLS_PATH%"
 
-    # 5️⃣ GN 配置（静态库，适合 MixedReality.WebRTC）
-    - name: Configure GN
-      shell: cmd
-      run: |
-        cd webrtc\src
-        gn gen out\Release --args="^
-          is_debug=false ^
-          rtc_include_tests=false ^
-          rtc_build_examples=false ^
-          is_component_build=false ^
-          use_rtti=true ^
-          treat_warnings_as_errors=false
-        "
+      # 4. 设置 depot_tools 到 PATH
+      - name: Add depot_tools to PATH
+        run: echo "%DEPOT_TOOLS_PATH%" >> $Env:GITHUB_PATH
 
-    # 6️⃣ 编译（限制并行，防止 Windows Runner 内存炸）
-    - name: Build WebRTC
-      shell: cmd
-      run: |
-        cd webrtc\src
-        ninja -C out\Release -j2
+      # 5. 拉取 WebRTC 源码（缓存）
+      - name: Cache WebRTC source
+        uses: actions/cache@v3
+        id: webrtc-cache
+        with:
+          path: webrtc/src
+          key: webrtc-src-v1
 
-    # 7️⃣ 上传编译产物
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: webrtc-windows-release
-        path: webrtc/src/out/Release
+      - name: Fetch WebRTC
+        shell: pwsh
+        run: |
+          if (!(Test-Path webrtc/src)) {
+            mkdir webrtc
+            cd webrtc
+            & "$Env:DEPOT_TOOLS_PATH\fetch.bat" --nohooks webrtc
+            cd src
+            & "$Env:DEPOT_TOOLS_PATH\gclient.bat" sync
+          } else {
+            Write-Host "Using cached WebRTC source"
+          }
+
+      # 6. 生成 Ninja 构建文件
+      - name: Generate build files
+        shell: pwsh
+        run: |
+          cd webrtc/src
+          & "$Env:DEPOT_TOOLS_PATH\gn.exe" gen out\Default --args="is_debug=false target_os=\"win\" target_cpu=\"x64\""
+
+      # 7. 编译 WebRTC
+      - name: Build WebRTC
+        shell: pwsh
+        run: |
+          cd webrtc/src
+          & "$Env:DEPOT_TOOLS_PATH\ninja.exe" -C out\Default
+
+      # 8. 打印完成
+      - name: Done
+        run: echo "WebRTC build completed!"
