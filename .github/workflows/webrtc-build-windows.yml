@@ -15,14 +15,17 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # ✅ 关键：避免浅克隆导致版本/时间戳脚本取不到信息
 
     - name: Clone depot_tools
+      shell: pwsh
       run: |
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-        echo "$PWD\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        "$PWD\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
     - name: Install VS Build Tools
-      shell: powershell
+      shell: pwsh
       run: |
         choco install visualstudio2022buildtools -y --package-parameters `
           "--add Microsoft.VisualStudio.Workload.VCTools `
@@ -37,6 +40,8 @@ jobs:
         fetch --nohooks webrtc
         cd src
         gclient sync --jobs 4
+        gclient runhooks    REM ✅ 关键：生成 build\util\LASTCHANGE.committime 等文件
+        dir build\util\LASTCHANGE*  REM ✅ 可选：验证文件已生成
 
     - name: Configure GN
       shell: cmd
