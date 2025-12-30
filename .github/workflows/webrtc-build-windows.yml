@@ -10,37 +10,33 @@ jobs:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Clone depot_tools
       run: |
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-        echo "$PWD\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        echo "$PWD\depot_tools" >> $env:GITHUB_PATH
 
     - name: Fetch WebRTC
       shell: cmd
       run: |
         mkdir webrtc
         cd webrtc
-        fetch --nohooks webrtc
+        fetch webrtc
         cd src
         gclient sync
+        gclient runhooks
 
-    - name: Configure GN
+    - name: Generate LASTCHANGE (fix CI issue)
       shell: cmd
       run: |
         cd webrtc\src
-        gn gen out\Release --args="is_debug=false rtc_include_tests=false is_component_build=false"
+        python build\util\lastchange.py -o build\util\LASTCHANGE
+        python build\util\lastchange.py -o build\util\LASTCHANGE.committime --committime
 
     - name: Build WebRTC
       shell: cmd
       run: |
         cd webrtc\src
-        ninja -C out\Release
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: webrtc-windows
-        path: webrtc/src/out/Release
+        gn gen out\Release --args="is_debug=false rtc_include_tests=false is_component_build=false"
+        ninja -C out\Release -j2
