@@ -1,9 +1,7 @@
 name: Build WebRTC on Windows
 
+# 只允许手动触发
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -40,43 +38,4 @@ jobs:
 
       # 4. 设置 depot_tools 到 PATH
       - name: Add depot_tools to PATH
-        run: echo "%DEPOT_TOOLS_PATH%" >> $Env:GITHUB_PATH
-
-      # 5. 拉取 WebRTC 源码（缓存）
-      - name: Cache WebRTC source
-        uses: actions/cache@v3
-        id: webrtc-cache
-        with:
-          path: webrtc/src
-          key: webrtc-src-v1
-
-      - name: Fetch WebRTC
-        shell: pwsh
-        run: |
-          if (!(Test-Path webrtc/src)) {
-            mkdir webrtc
-            cd webrtc
-            & "$Env:DEPOT_TOOLS_PATH\fetch.bat" --nohooks webrtc
-            cd src
-            & "$Env:DEPOT_TOOLS_PATH\gclient.bat" sync
-          } else {
-            Write-Host "Using cached WebRTC source"
-          }
-
-      # 6. 生成 Ninja 构建文件
-      - name: Generate build files
-        shell: pwsh
-        run: |
-          cd webrtc/src
-          & "$Env:DEPOT_TOOLS_PATH\gn.exe" gen out\Default --args="is_debug=false target_os=\"win\" target_cpu=\"x64\""
-
-      # 7. 编译 WebRTC
-      - name: Build WebRTC
-        shell: pwsh
-        run: |
-          cd webrtc/src
-          & "$Env:DEPOT_TOOLS_PATH\ninja.exe" -C out\Default
-
-      # 8. 打印完成
-      - name: Done
-        run: echo "WebRTC build completed!"
+        run: echo "%DEPOT_TOOLS_PATH%" >>
