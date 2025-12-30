@@ -8,12 +8,14 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 180
 
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+      GYP_MSVS_VERSION: 2022
+
     steps:
-    # 1️⃣ 拉取仓库
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    # 2️⃣ 克隆 depot_tools
     - name: Clone depot_tools
       run: |
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
@@ -27,9 +29,6 @@ jobs:
            --add Microsoft.VisualStudio.Component.Windows11SDK.22621 `
            --includeRecommended --quiet --norestart"
 
-
-
-    # 3️⃣ 拉取 WebRTC 源码
     - name: Fetch WebRTC
       shell: cmd
       run: |
@@ -39,22 +38,18 @@ jobs:
         cd src
         gclient sync --jobs 4
 
-    # 4️⃣ 配置 GN (cmd shell 下正确的字符串)
     - name: Configure GN
       shell: cmd
       run: |
         cd webrtc\src
         gn gen out\Release --args="is_debug=false rtc_include_tests=false is_component_build=false target_cpu=\"x64\""
 
-    # 5️⃣ 编译 WebRTC
     - name: Build WebRTC
       shell: cmd
       run: |
         cd webrtc\src
-        set DEPOT_TOOLS_WIN_TOOLCHAIN=0
         ninja -C out\Release -j 4
 
-    # 6️⃣ 上传构建产物
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
